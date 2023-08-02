@@ -1,0 +1,23 @@
+{
+  "preset": "ts-jest",
+  "moduleFileExtensions": [
+    "js",
+    "json",
+    "ts"
+  ],
+  "roots": [
+    "<rootDir>/src"
+  ],
+  "typeRoots": [
+    "./node_modules/@types"
+  ],
+  "rootDir": ".",
+  "testMatch": [ "**/__tests__/**/*.[jt]s?(x)" ],
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "collectCoverageFrom": [
+    "**/*.(t|j)s"
+  ],
+  "testEnvironment": "node"
+}
