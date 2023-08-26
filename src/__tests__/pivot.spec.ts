@@ -80,12 +80,16 @@ describe('dynamic pivot table demo', () => {
       {} as Record<keyof IProductSales, string>,
     );
 
+    // using catagory as the aggreated pivot column
+    const uniqueColumnHeaders = [...new Set(Object.values(productAndCategory).map((catagory) => catagory.toString()))];
+
     const query = setPivotColumns({
       sourceTable: normalisedSourceTableName,
       valueColumn: normalisedFields.salesAmount,
-      transposedColumn: normalisedFields.customerId,
+      transposedColumn: normalisedFields.productCategory,
+      transposedColumnValues: uniqueColumnHeaders,
       aggregationMethod: 'SUM',
-      selectColumns: [normalisedFields.productCategory],
+      selectColumns: [normalisedFields.customerId],
     });
 
     expect(true).toBeTruthy();

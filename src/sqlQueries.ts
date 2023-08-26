@@ -1,6 +1,6 @@
 interface IGetDynamicPivotArgs {
   columnHeaders: (string | number)[];
-  transposedColumn: string;
+  aggregatedColumnName: string;
 }
 
 export interface IPivotValueFilters {
@@ -13,37 +13,45 @@ export interface IPivotValueFilters {
 /**
  * constructs a dynamic pivoting phase of the query
  */
-const getDynamicPivotQueryPart = ({ columnHeaders, transposedColumn }: IGetDynamicPivotArgs) =>
-  columnHeaders.map((columnHeader) => `coalesce((${transposedColumn} ->> '${columnHeader}')::int, 0) as "${transposedColumn}_${columnHeader}"`);
+const getDynamicPivotQueryPart = ({ columnHeaders, aggregatedColumnName }: IGetDynamicPivotArgs) =>
+  columnHeaders.map((columnHeader) => `coalesce((json_aggregation ->> '${columnHeader}')::int, 0) as "${aggregatedColumnName}_${columnHeader}"`);
 
-const aggregateValue = (valueColumn: string, aggregationMethod: 'SUM' | 'AVG', partitionColumns: string[]) =>
-  `${aggregationMethod}(${valueColumn}) OVER (PARTITION BY ${arrayToString(partitionColumns)})`;
-
-const arrayToString = (columnNames: string[]) => `${columnNames.map((columnName) => `"${columnName}"`).join(', ')}`;
+const arrayToColumnName = (columnNames: string[]) => `${columnNames.map((columnName) => `"${columnName}"`).join(', ')}`;
 
 interface IGetPivotArgs {
   transposedColumn: string;
+  transposedColumnValues: string[];
   selectColumns: string[];
   sourceTable: string;
   aggregationMethod: 'SUM' | 'AVG';
   valueColumn: string;
 }
 
-export const setPivotColumns = ({ transposedColumn, selectColumns, sourceTable, aggregationMethod, valueColumn }: IGetPivotArgs) => {
+export const setPivotColumns = ({ transposedColumn, selectColumns, sourceTable, aggregationMethod, valueColumn, transposedColumnValues }: IGetPivotArgs) => {
   return `
-        WITH column_headers AS (SELECT DISTINCT ${transposedColumn}
-                                FROM ${sourceTable} s),
+        WITH column_headers
+                 AS (SELECT unnest(array [${transposedColumnValues}]) "pivot_columns"),
              aggregation
-                 AS (SELECT ch.${transposedColumn},
-                            ${arrayToString(selectColumns)},
+                 AS (SELECT ch.pivot_columns,
+                            ${arrayToColumnName(selectColumns)},
                             COALESCE(${aggregationMethod}(${valueColumn}), 0) "${valueColumn}"
                      FROM column_headers ch
                               LEFT JOIN ${sourceTable} s
-                                        ON ch.${transposedColumn} = s.${transposedColumn}
-                     GROUP BY ch.${transposedColumn},
-                              ${arrayToString(selectColumns)})
+                                        ON ch.pivot_columns = s.${transposedColumn}
+                     GROUP BY ch.pivot_columns,
+                              ${arrayToColumnName(selectColumns)}),
+             pre_pivot AS (SELECT ${arrayToColumnName(selectColumns)},
+                                  json_object_agg(pivot_columns, ${valueColumn}) AS json_aggregation
+                           FROM aggregation
+                           GROUP BY ${arrayToColumnName(selectColumns)}),
+             pivot AS (SELECT ${arrayToColumnName(selectColumns)},
+                              ${getDynamicPivotQueryPart({
+                                columnHeaders: transposedColumnValues,
+                                aggregatedColumnName: transposedColumn,
+                              })}
+                       FROM pre_pivot)
         SELECT *
-        FROM aggregation;
+        FROM pivot;
     `;
 };
 
