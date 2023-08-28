@@ -27,7 +27,7 @@ interface IGetPivotArgs {
   valueColumn: string;
 }
 
-export const setPivotColumns = ({ transposedColumn, selectColumns, sourceTable, aggregationMethod, valueColumn, transposedColumnValues }: IGetPivotArgs) => {
+export const getPivotQuery = ({ transposedColumn, selectColumns, sourceTable, aggregationMethod, valueColumn, transposedColumnValues }: IGetPivotArgs) => {
   return `
         WITH column_headers
                  AS (SELECT unnest(array [${transposedColumnValues}]) "pivot_columns"),
@@ -38,6 +38,7 @@ export const setPivotColumns = ({ transposedColumn, selectColumns, sourceTable, 
                      FROM column_headers ch
                               LEFT JOIN ${sourceTable} s
                                         ON ch.pivot_columns = s.${transposedColumn}
+                     WHERE ${selectColumns.map((selectColumn) => `s.${selectColumn} IS NOT NULL`).join(' AND ')}
                      GROUP BY ch.pivot_columns,
                               ${arrayToColumnName(selectColumns)}),
              pre_pivot AS (SELECT ${arrayToColumnName(selectColumns)},

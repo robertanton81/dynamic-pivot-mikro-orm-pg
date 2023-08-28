@@ -1,10 +1,35 @@
-import { MikroORM } from '@mikro-orm/core';
+import { EntitySchema, MikroORM } from '@mikro-orm/core';
 import mikroOrmConfig from '../mikro-orm.config';
 import { PostgreSqlMikroORM } from '@mikro-orm/postgresql/PostgreSqlMikroORM';
 
 import { faker } from '@faker-js/faker';
 import { IProductSales, ProductSalesEntity } from '../productSales.entity';
-import { setPivotColumns } from '../sqlQueries';
+import { getPivotQuery } from '../sqlQueries';
+import { PostgreSqlDriver, SqlEntityManager } from '@mikro-orm/postgresql';
+
+const testData: IProductSales[] = [
+  {
+    salesDate: new Date('2021-08-26 21:11:07 +00:00'),
+    salesAmount: 1,
+    productId: 4,
+    productCategory: 1,
+    customerId: 11,
+  },
+  {
+    salesDate: new Date('2021-08-27 04:18:07 +00:00'),
+    salesAmount: 1,
+    productId: 1,
+    productCategory: 1,
+    customerId: 11,
+  },
+  {
+    salesDate: new Date('2021-08-28 11:06:07 +00:00'),
+    salesAmount: 1,
+    productId: 6,
+    productCategory: 3,
+    customerId: 11,
+  },
+];
 
 const productAndCategory: Record<number, number> = {
   1: 1,
@@ -27,6 +52,38 @@ const normaliseDatabaseFieldName = (name: string): string => {
   return normalised.startsWith('_') ? normalised.slice(1) : normalised;
 };
 
+const getFieldsObject = <T>(entitySchema: EntitySchema<T>) => {
+  const entityProps = entitySchema.meta.properties;
+  const fields = Object.keys(entityProps) as (keyof typeof entityProps)[];
+
+  return fields.reduce(
+    (acc, name) => ({
+      ...acc,
+      [name]: normaliseDatabaseFieldName(name),
+    }),
+    {} as Record<keyof IProductSales, string>,
+  );
+};
+
+const getAdHocSalesData = (start: Date, em: SqlEntityManager<PostgreSqlDriver>) => {
+  const dates = getSalesDates(start);
+
+  const sales = dates.map((date) => {
+    const productId: number = faker.number.int({ min: 1, max: 6 });
+    const productCategory = productAndCategory[productId];
+
+    const salesData: IProductSales = {
+      salesDate: date,
+      productId,
+      productCategory,
+      salesAmount: getSalesAmount(),
+      customerId: faker.number.int({ min: 10, max: 20 }),
+    };
+
+    return em.create<IProductSales>(ProductSalesEntity, salesData);
+  });
+};
+
 describe('dynamic pivot table demo', () => {
   let orm: PostgreSqlMikroORM;
 
@@ -47,43 +104,21 @@ describe('dynamic pivot table demo', () => {
     const start = new Date();
     start.setFullYear(now.getFullYear() - 2);
 
-    const dates = getSalesDates(start);
-
-    const sales = dates.map((date) => {
-      const productId: number = faker.number.int({ min: 1, max: 6 });
-      const productCategory = productAndCategory[productId];
-
-      const saleData: IProductSales = {
-        salesDate: date,
-        productId,
-        productCategory,
-        salesAmount: getSalesAmount(),
-        customerId: faker.number.int({ min: 10, max: 20 }),
-      };
-
-      return em.create<IProductSales>(ProductSalesEntity, saleData);
+    const sales = testData.map((sale) => {
+      return em.create<IProductSales>(ProductSalesEntity, sale);
     });
     await em.persistAndFlush(sales);
     //#endregion
 
-    const entityProps = ProductSalesEntity.meta.properties;
     // this depends on your orm settings, but as default, the column and table names in database are snake_case
     // so we need to normalise the field names to match the database settings
     const normalisedSourceTableName = normaliseDatabaseFieldName(ProductSalesEntity.name.toString());
-
-    const fields = Object.keys(entityProps) as (keyof typeof entityProps)[];
-    const normalisedFields: Record<keyof IProductSales, string> = fields.reduce(
-      (acc, name) => ({
-        ...acc,
-        [name]: normaliseDatabaseFieldName(name),
-      }),
-      {} as Record<keyof IProductSales, string>,
-    );
+    const normalisedFields = getFieldsObject(ProductSalesEntity);
 
     // using catagory as the aggreated pivot column
     const uniqueColumnHeaders = [...new Set(Object.values(productAndCategory).map((catagory) => catagory.toString()))];
 
-    const query = setPivotColumns({
+    const query = getPivotQuery({
       sourceTable: normalisedSourceTableName,
       valueColumn: normalisedFields.salesAmount,
       transposedColumn: normalisedFields.productCategory,
@@ -92,6 +127,15 @@ describe('dynamic pivot table demo', () => {
       selectColumns: [normalisedFields.customerId],
     });
 
-    expect(true).toBeTruthy();
+    const pivot = await em.execute(query);
+
+    expect(pivot).toEqual([
+      {
+        customer_id: 11,
+        product_category_1: 2,
+        product_category_2: 0,
+        product_category_3: 1,
+      },
+    ]);
   });
 });
