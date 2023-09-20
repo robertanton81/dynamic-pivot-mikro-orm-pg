@@ -1,6 +1,7 @@
 import { EntitySchema } from '@mikro-orm/core';
 import { IProductSales } from './productSales.entity';
 import { IPivotValueFilters } from './types';
+import { IFilter } from './filters';
 
 export const normaliseDatabaseFieldName = (name: string): string => {
   const normalised = name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
@@ -20,15 +21,31 @@ export const getFieldsObject = <T>(entitySchema: EntitySchema<T>) => {
   );
 };
 
-export const sanitizeFilters = (valueFilters: IPivotValueFilters) => {
-  const sqlInjectionMatcher = `^(?!.*\\-\\-)(?!.*\\/\\*)(?!.*\\*\\/)(?!.*;)(?!.*CREATE)(?!.*DROP)(?!.*ALTER)(?!.*FROM)(?!.*DATABASE)(?!.*TABLE)(?!.*SELECT)(?!.*UPDATE)(?!.*=)(?!.*TRUE)(?!.*DELETE).*$`;
+export interface ISort {
+  orderByField: string;
+  sort: 'ASC' | 'DESC';
+}
 
-  return Object.values(valueFilters)
-    .map((filterValue) => String(filterValue).toUpperCase())
-    .map((value) => {
-      const sqlIsSafe = value.match(sqlInjectionMatcher);
-      if (!sqlIsSafe) throw new Error('Invalid SQL query arguments');
+const getSqlWhereFilters = <T extends string>(filters: IFilter<T>[]) => {
+  const sqlFilters = filters.map((filter) => {
+    const { fieldName } = filter;
+  });
+  // const phraseFilterString = `LOWER(phrase) LIKE '%${filters}%'`;
+  // const nameFilterString =
+  //   catalog === 'kd'
+  //     ? `LOWER((catalog ->> 0) ::json ->> 'jmeno_dokladu') LIKE '%${filterValue?.toLowerCase()}%'`
+  //     : `CONCAT(LOWER((catalog ->> 0) ::json ->> 'jmeno'),' ',LOWER((catalog ->> 0) ::json ->> 'prijmeni')) LIKE '%${filterValue}%'`;
+  // const labelFilterString = `label = '${labelFilter?.toLowerCase()}'`;
+  // const withoutTerminatedFilterString = `(catalog ->> 0) ::json ->> 'ukonceno' = 'false'`;
+  //
+  // const filterStrings = {
+  //   ...getViewFilters(filterField, phraseFilterString, 'phrase'),
+  //   ...getViewFilters(filterValue, nameFilterString, 'name'),
+  //   ...getViewFilters(withoutTerminatedFilter, withoutTerminatedFilterString, 'withoutTerminated'),
+  //   ...(labelFilter ? getViewFilters(labelFilter, labelFilterString, 'label') : {}),
+  // };
+  //
+  // if (!isEmptyOptional([filterField, filterValue, labelFilter, withoutTerminatedFilter])) return `WHERE ${Object.values(filterStrings).join(' AND ')}`;
 
-      return sqlIsSafe;
-    });
+  return '';
 };
